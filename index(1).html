@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weather App</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300;400;600&display=swap" rel="stylesheet">
+<style>
+  /* Registered so the sky colour can fade smoothly when the weather changes */
+  @property --top    { syntax: "<color>"; inherits: true; initial-value: #2a7fc4; }
+  @property --bottom { syntax: "<color>"; inherits: true; initial-value: #0d4f8c; }
+
+  body                   { --top: #2a7fc4; --bottom: #0d4f8c; --glow: rgba(255, 236, 170, 0.55); }
+  body[data-sky="night"] { --top: #25306b; --bottom: #0b1130; --glow: rgba(190, 205, 255, 0.28); }
+  body[data-sky="cloud"] { --top: #5f7d98; --bottom: #2c4259; --glow: rgba(255, 255, 255, 0.25); }
+  body[data-sky="rain"]  { --top: #3f6174; --bottom: #17303d; --glow: rgba(180, 220, 240, 0.18); }
+  body[data-sky="storm"] { --top: #4a3f6e; --bottom: #1a1530; --glow: rgba(210, 190, 255, 0.22); }
+  body[data-sky="snow"]  { --top: #5d7a94; --bottom: #2f4a63; --glow: rgba(255, 255, 255, 0.4); }
+  body[data-sky="fog"]   { --top: #6b7c88; --bottom: #34444f; --glow: rgba(255, 255, 255, 0.3); }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    color: #fff;
+    font-family: "Bricolage Grotesque", "Segoe UI", sans-serif;
+    background: linear-gradient(var(--top), var(--bottom)) fixed;
+    transition: --top 1.4s ease, --bottom 1.4s ease;
+  }
+  /* One soft light (sun or moon) in the corner */
+  body::before {
+    content: "";
+    position: fixed;
+    top: -22vmax; right: -22vmax;
+    width: 62vmax; height: 62vmax;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--glow), transparent 65%);
+    pointer-events: none;
+  }
+  main {
+    position: relative;
+    max-width: 620px;
+    margin: 0 auto;
+    padding: 28px 22px 48px;
+  }
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap;
+  }
+
+  /* Search */
+  .search {
+    display: flex;
+    padding: 5px;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.14);
+    backdrop-filter: blur(6px);
+  }
+  .search input {
+    flex: 1; min-width: 0;
+    padding: 10px 16px;
+    border: 0; outline: 0;
+    background: transparent;
+    color: #fff;
+    font: inherit; font-size: 1.05rem;
+  }
+  .search input::placeholder { color: rgba(255, 255, 255, 0.8); }
+  .search button {
+    padding: 10px 22px;
+    border: 0; border-radius: 999px;
+    background: #fff; color: #10324f;
+    font: inherit; font-weight: 600; font-size: 1rem;
+    cursor: pointer;
+  }
+  .search:focus-within { border-color: #fff; }
+  .search button:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+
+  /* Result */
+  #result { margin-top: 56px; }
+  .prompt { font-size: clamp(2rem, 8vw, 3rem); font-weight: 300; line-height: 1.1; margin: 0; max-width: 11em; }
+  .error  { font-size: 1.2rem; margin: 0; }
+  .city   { font-size: 1.5rem; font-weight: 600; margin: 0; }
+  .temp {
+    margin: 4px 0 0;
+    font-size: clamp(6.5rem, 30vw, 11.5rem);
+    font-weight: 300;
+    line-height: 0.95;
+    letter-spacing: -0.05em;
+  }
+  .temp sup { font-size: 0.35em; letter-spacing: 0; vertical-align: top; position: relative; top: 0.18em; margin-left: 0.04em; }
+  .desc { font-size: 1.5rem; font-weight: 400; margin: 6px 0 0; }
+
+  .facts { display: flex; margin: 36px 0 0; padding: 0; list-style: none; }
+  .facts li { flex: 1; padding-left: 14px; border-left: 2px solid rgba(255, 255, 255, 0.45); }
+  .facts li + li { margin-left: 14px; }
+  .facts strong { display: block; font-size: 1.4rem; font-weight: 600; }
+  .facts span { font-size: 0.95rem; opacity: 0.92; }
+
+  .forecast { margin: 40px 0 0; padding: 0; list-style: none; }
+  .forecast li {
+    display: grid;
+    grid-template-columns: 3.4em 1fr 6.5em;
+    align-items: center;
+    gap: 14px;
+    padding: 13px 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.28);
+  }
+  .forecast .day  { font-weight: 600; }
+  .forecast .what { font-size: 0.95rem; opacity: 0.92; }
+  .forecast .range { position: relative; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.22); }
+  .forecast .range i { position: absolute; top: 0; bottom: 0; border-radius: 3px; background: #fff; }
+  .forecast .nums { text-align: right; font-variant-numeric: tabular-nums; }
+  .forecast .nums span { opacity: 0.8; }
+  .forecast .mid { display: grid; gap: 7px; }
+
+  /* One reveal when results arrive */
+  .reveal { animation: rise 0.7s ease both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal { animation: none; }
+    body { transition: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <form class="search" id="form" role="search">
+    <label class="sr-only" for="city">City name</label>
+    <input id="city" type="text" placeholder="Search a city" autocomplete="off">
+    <button type="submit">Search</button>
+  </form>
+
+  <div id="result" aria-live="polite">
+    <p class="prompt">Which city’s weather do you want?</p>
+  </div>
+</main>
+
+<script>
+  const form = document.getElementById("form");
+  const input = document.getElementById("city");
+  const result = document.getElementById("result");
+
+  // Open-Meteo weather codes -> plain words
+  const codes = {
+    0: "Clear sky", 1: "Mostly clear", 2: "Partly cloudy", 3: "Cloudy",
+    45: "Fog", 48: "Fog", 51: "Light drizzle", 53: "Drizzle", 55: "Heavy drizzle",
+    56: "Freezing drizzle", 57: "Freezing drizzle",
+    61: "Light rain", 63: "Rain", 65: "Heavy rain", 66: "Freezing rain", 67: "Freezing rain",
+    71: "Light snow", 73: "Snow", 75: "Heavy snow", 77: "Snow grains",
+    80: "Rain showers", 81: "Rain showers", 82: "Heavy showers", 85: "Snow showers", 86: "Snow showers",
+    95: "Thunderstorm", 96: "Thunderstorm, hail", 99: "Thunderstorm, hail"
+  };
+
+  // Pick the sky colours for the weather
+  function skyFor(code, isDay) {
+    let sky = "clear";
+    if ([2, 3].includes(code)) sky = "cloud";
+    if ([45, 48].includes(code)) sky = "fog";
+    if ([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82].includes(code)) sky = "rain";
+    if ([71, 73, 75, 77, 85, 86].includes(code)) sky = "snow";
+    if ([95, 96, 99].includes(code)) sky = "storm";
+    if (!isDay && (sky === "clear" || sky === "cloud")) sky = "night";
+    return sky;
+  }
+
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const deg = (n) => Math.round(n) + "°";
+
+  function setMessage(html) {
+    result.innerHTML = html;
+  }
+
+  async function getWeather(name) {
+    setMessage('<p class="error">Loading…</p>');
+    try {
+      // Step 1: city name -> latitude and longitude
+      const geoRes = await fetch(
+        "https://geocoding-api.open-meteo.com/v1/search?count=1&name=" + encodeURIComponent(name)
+      );
+      const geo = await geoRes.json();
+      if (!geo.results || !geo.results.length) {
+        setMessage('<p class="error">City not found. Check the spelling and try again.</p>');
+        return;
+      }
+      const p = geo.results[0];
+
+      // Step 2: latitude and longitude -> weather now + next 5 days
+      const url =
+        "https://api.open-meteo.com/v1/forecast?latitude=" + p.latitude + "&longitude=" + p.longitude +
+        "&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code,is_day" +
+        "&daily=weather_code,temperature_2m_max,temperature_2m_min" +
+        "&forecast_days=5&timezone=auto";
+      const data = await (await fetch(url)).json();
+      const c = data.current;
+      const d = data.daily;
+
+      document.body.dataset.sky = skyFor(c.weather_code, c.is_day === 1);
+
+      // Forecast rows: bar shows each day's range inside the 5-day range
+      const lo = Math.min(...d.temperature_2m_min);
+      const hi = Math.max(...d.temperature_2m_max);
+      const span = Math.max(hi - lo, 1);
+      const rows = d.time.map((day, i) => {
+        const name = i === 0 ? "Today" : new Date(day + "T00:00").toLocaleDateString("en", { weekday: "short" });
+        const left = ((d.temperature_2m_min[i] - lo) / span) * 100;
+        const width = Math.max(((d.temperature_2m_max[i] - d.temperature_2m_min[i]) / span) * 100, 6);
+        return (
+          "<li>" +
+            '<span class="day">' + name + "</span>" +
+            '<div class="mid"><span class="what">' + (codes[d.weather_code[i]] || "") + "</span>" +
+            '<div class="range"><i style="left:' + left + "%;width:" + width + '%"></i></div></div>' +
+            '<span class="nums">' + deg(d.temperature_2m_max[i]) + " <span>" + deg(d.temperature_2m_min[i]) + "</span></span>" +
+          "</li>"
+        );
+      }).join("");
+
+      setMessage(
+        '<div class="reveal">' +
+          '<p class="city">' + esc(p.name) + (p.country ? ", " + esc(p.country) : "") + "</p>" +
+          '<p class="temp">' + Math.round(c.temperature_2m) + "<sup>°</sup></p>" +
+          '<p class="desc">' + (codes[c.weather_code] || "Weather") + "</p>" +
+          '<ul class="facts">' +
+            "<li><strong>" + deg(c.apparent_temperature) + "</strong><span>Feels like</span></li>" +
+            "<li><strong>" + c.relative_humidity_2m + "%</strong><span>Humidity</span></li>" +
+            "<li><strong>" + Math.round(c.wind_speed_10m) + " km/h</strong><span>Wind</span></li>" +
+          "</ul>" +
+          '<ul class="forecast">' + rows + "</ul>" +
+        "</div>"
+      );
+    } catch (err) {
+      setMessage('<p class="error">Could not load the weather. Check your internet and try again.</p>');
+    }
+  }
+
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const name = input.value.trim();
+    if (!name) {
+      setMessage('<p class="error">Please enter a city name.</p>');
+      return;
+    }
+    getWeather(name);
+  });
+</script>
+</body>
+</html>
